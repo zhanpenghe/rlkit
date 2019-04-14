@@ -21,3 +21,10 @@ class Policy(object, metaclass=abc.ABCMeta):
 class ExplorationPolicy(Policy, metaclass=abc.ABCMeta):
     def set_num_steps_total(self, t):
         pass
+
+
+class StochasticPolicy(Policy, metaclass=abc.ABCMeta):
+
+    @property
+    def distribution(self):
+        return self._distribution
