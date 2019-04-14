@@ -5,9 +5,10 @@ Algorithm-specific networks should go else-where.
 """
 import torch
 from torch import nn as nn
+from torch.distributions import Normal
 from torch.nn import functional as F
 
-from rlkit.policies.base import Policy
+from rlkit.policies.base import Policy, StochasticPolicy
 from rlkit.torch import pytorch_util as ptu
 from rlkit.torch.core import eval_np
 from rlkit.torch.data_management.normalizer import TorchFixedNormalizer
@@ -121,3 +122,37 @@ class TanhMlpPolicy(MlpPolicy):
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, output_activation=torch.tanh, **kwargs)
+
+
+class GaussianMlpPolicy(MlpPolicy, StochasticPolicy):
+
+    def __init__(
+            self,
+            observation_dim,
+            action_dim,
+            *args,
+            **kwargs,):
+        self._observation_dim = observation_dim
+        self._action_dim = action_dim
+        super().__init__(
+            input_size=observation_dim,
+            output_size=2*action_dim,  # mean and std share network for now.
+            *args,
+            **kwargs,)
+        self._distribution = Normal
+
+    def forward(self, input, **kwargs):
+        mlp_outputs = super().forward(input, **kwargs)
+        
+        # Split the mean and log std
+        means = mlp_outputs.narrow(1, 0, self._action_dim)
+        log_stds = mlp_outputs.narrow(1, self._action_dim, self._action_dim)
+        stds = torch.exp(log_stds)
+        distribution = self._distribution(means, stds)
+        samples = distribution.sample()
+        info = dict(
+            mean=means,
+            log_std=log_stds,
+            dist=distribution,
+        )
+        return samples, info
