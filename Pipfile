@@ -6,6 +6,7 @@ verify_ssl = true
 [dev-packages]
 yapf = "*"
 ipdb  = "*"
+pylint = "*"
 
 [packages]
 joblib = "==0.9.4"
@@ -23,7 +24,6 @@ mujoco-py = "==2.0.2.0"
 opencv-python = "*"
 multiworld = {git = "git+https://github.com/vitchyr/multiworld.git@b073e69c6991e877723ee55f85a3dfc57bed8674"}
 gtimer = "==1.0.0b5"
-
 # TODO add box2d back
 # pybox2d = {git = "git+https://github.com/pybox2d/pybox2d.git@2ac035109a234acf3dc6a51e1bb0315f398498e8"}
 
