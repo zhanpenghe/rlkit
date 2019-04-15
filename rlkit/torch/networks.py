@@ -3,8 +3,10 @@ General networks for pytorch.
 
 Algorithm-specific networks should go else-where.
 """
+import numpy as np
 import torch
 from torch import nn as nn
+from torch.autograd import Variable
 from torch.distributions import Normal
 from torch.nn import functional as F
 
@@ -156,3 +158,36 @@ class GaussianMlpPolicy(MlpPolicy, StochasticPolicy):
             dist=distribution,
         )
         return samples, info
+
+
+class GaussianMlpBaseline(Mlp):
+    def __init__(
+        self,
+        hidden_sizes,
+        input_size,
+        init_std=1.,
+        *args,
+        **kwargs):
+        
+        super().__init__(
+            hidden_sizes=hidden_sizes,
+            output_size=1,
+            input_size=input_size,
+            *args,
+            **kwargs)
+        self._distribution = Normal
+
+        # Create std variables
+        init_std_log = torch.tensor(np.log(init_std))
+        self._log_std = Variable(init_std_log, requires_grad=True,)
+
+    def forward(self, input, **kwargs):
+        means = super().forward(input, **kwargs)
+        dist = self._distribution(means, torch.exp(self._log_std))
+        samples = dist.sample()
+        info = dict(mean=means, log_std=self._log_std, dist=dist)
+        return samples, info
+    
+    @property
+    def distribution(self):
+        return self._distribution
