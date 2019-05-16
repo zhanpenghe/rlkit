@@ -90,6 +90,9 @@ class FlattenMlp(Mlp):
         flat_inputs = torch.cat(inputs, dim=1)
         return super().forward(flat_inputs, **kwargs)
 
+"""
+TODO: Move policies, embedding/ecoding functions to other packages.
+"""
 
 class MlpPolicy(Mlp, Policy):
     """
@@ -134,8 +137,8 @@ class GaussianMlpPolicy(MlpPolicy, StochasticPolicy):
             action_dim,
             *args,
             **kwargs,):
-        self._observation_dim = observation_dim
-        self._action_dim = action_dim
+        self.observation_dim = observation_dim
+        self.action_dim = action_dim
         super().__init__(
             input_size=observation_dim,
             output_size=2*action_dim,  # mean and std share network for now.
@@ -191,3 +194,31 @@ class GaussianMlpBaseline(Mlp):
     @property
     def distribution(self):
         return self._distribution
+
+
+# TODO consider use GaussianEmbedding
+class GaussianContextEncoder(Mlp):
+
+    def __init__(self, input_size, latent_dim,
+        hidden_sizes, use_ib=True, *args, **kwargs):
+
+        self.use_ib = use_ib
+        super().__init__(input_size=input_size, output_size=latent_dim,
+            hidden_sizes=hidden_sizes, *args, **kwargs,)
+
+    def forward(self, inputs, **kwargs):
+        mlp_outputs = super().forward(inputs, **kwargs)
+        means = mlp_outputs.narrow(1, 0, self.output_size)
+        log_stds = mlp_outputs.narrow(1, self.output_size, self.output_size)
+        stds = torch.exp(log_stds)
+        distribution = self._distribution(means, stds)
+        samples = distribution.sample()
+        info = dict(
+            mean=means,
+            log_std=log_stds,
+            dist=distribution,
+        )
+        return samples, info
+
+    def get_latents(self, inputs):
+        return eval_np(self, inputs)
