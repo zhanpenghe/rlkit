@@ -7,3 +7,4 @@ rlkit/launchers/conf_private.py
 *.egg-info
 \.idea/
 .vscode
+Pipfile.lock
