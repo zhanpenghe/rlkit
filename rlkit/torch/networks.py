@@ -93,7 +93,6 @@ class FlattenMlp(Mlp):
 """
 TODO: Move policies, embedding/ecoding functions to other packages.
 """
-
 class MlpPolicy(Mlp, Policy):
     """
     A simpler interface for creating policies.

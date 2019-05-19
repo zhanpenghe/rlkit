@@ -1,11 +1,13 @@
 import abc
 from collections import OrderedDict
 
-from typing import Iterable
+import gtimer as gt
 from torch import nn as nn
+from typing import Iterable
 
 from rlkit.core.batch_rl_algorithm import BatchRLAlgorithm
 from rlkit.core.online_rl_algorithm import OnlineRLAlgorithm
+from rlkit.core.onpolicy_rl_algorithm import OnPolicyRLAlgorithm
 from rlkit.core.trainer import Trainer
 from rlkit.torch.core import np_to_pytorch_batch
 
@@ -52,3 +54,50 @@ class TorchTrainer(Trainer, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def networks(self) -> Iterable[nn.Module]:
         pass
+
+
+class TorchOnpolicyRLAlgorithm(OnPolicyRLAlgorithm):
+    
+    def __init__(
+            self,
+            trainer,
+            exploration_env,
+            exploration_data_collector,
+            batch_size,
+            max_path_length,
+            num_epochs,
+            num_expl_steps_per_train_loop,
+            num_trains_per_train_loop,
+            num_train_loops_per_epoch=1,):
+        super().__init__(trainer, exploration_env, exploration_data_collector)
+
+        self.batch_size = batch_size
+        self.max_path_length = max_path_length
+        self.num_epochs = num_epochs
+        self.num_expl_steps_per_train_loop = num_expl_steps_per_train_loop
+        self.num_trains_per_train_loop = num_trains_per_train_loop
+        self.num_train_loops_per_epoch = num_train_loops_per_epoch
+    
+    def process_batch(self, batch):
+        """Process paths to be compatible."""
+        batch = self.trainer.process_batch(batch) 
+        return batch
+
+    def _train(self):
+        self.training_mode = 'training'
+        for _ in gt.timed_for(
+            range(self._start_epoch, self.num_epochs),
+            save_itrs=True
+        ):
+            # TODO this is very likely not correct..
+            batch = self.expl_data_collector.collect_new_paths(
+                self.max_path_length,
+                self.batch_size,  # num steps
+                discard_incomplete_paths=False,
+            )
+            processed_batch = self.process_batch(batch)
+            self.trainer.train(processed_batch)
+
+    def to(self, device):
+        for net in self.trainer.networks:
+            net.to(device)
