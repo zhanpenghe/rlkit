@@ -186,7 +186,7 @@ class GaussianMlpBaseline(Mlp):
     def forward(self, input, **kwargs):
         means = super().forward(input, **kwargs)
         dist = self._distribution(means, torch.exp(self._log_std))
-        samples = dist.sample()
+        samples = dist.rsample()
         info = dict(mean=means, log_std=self._log_std, dist=dist)
         return samples, info
     

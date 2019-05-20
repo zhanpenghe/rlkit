@@ -85,18 +85,21 @@ class TorchOnpolicyRLAlgorithm(OnPolicyRLAlgorithm):
 
     def _train(self):
         self.training_mode = 'training'
-        for _ in gt.timed_for(
+        for epoch in gt.timed_for(
             range(self._start_epoch, self.num_epochs),
             save_itrs=True
         ):
-            # TODO this is very likely not correct..
+            gt.stamp('exploration sampling', unique=False)
             batch = self.expl_data_collector.collect_new_paths(
                 self.max_path_length,
                 self.batch_size,  # num steps
                 discard_incomplete_paths=False,
             )
+            gt.stamp('samples processing', unique=False)
             processed_batch = self.process_batch(batch)
+            gt.stamp('networks optimizing', unique=False)
             self.trainer.train(processed_batch)
+            self._end_epoch(epoch)
 
     def to(self, device):
         for net in self.trainer.networks:

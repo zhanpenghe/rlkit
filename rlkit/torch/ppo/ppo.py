@@ -4,6 +4,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+# This is currently the only distribution supporting..
+# because rlkit did not implemented the distribution field.
+from rlkit.torch.distributions import TanhNormal
 from rlkit.torch.torch_rl_algorithm import TorchTrainer
 
 
@@ -44,12 +47,12 @@ class PPOTrainer(TorchTrainer):
 
     def _train_baseline(self, batch):
         # observations and returns
-        observations = np.concatenate([o for o in batch['observations']])
-        returns = np.concatenate([ret for ret in batch['returns']])
+        observations = batch['observations']
+        returns = batch['returns']
 
         # optimize baseline
         self.baseline_optimizer.zero_grad()
-        returns_pred = self.baseline(observations)
+        returns_pred = self.baseline(observations)[0]
         critic = nn.MSELoss()
         loss = critic(returns_pred, returns)
         loss.backward()
@@ -61,21 +64,30 @@ class PPOTrainer(TorchTrainer):
 
         # obs.shape = [N_TRAJS, H, OBS_DIM]        
         obs = batch['observations']
-        obs = obs.reshape((-1, self.policy.observation_dim))
-        _, infos = self.policy(obs)
-        action_dist = infos['dist']
+        obs = obs.reshape((-1, self.policy.input_size))
+        policy_outputs = self.policy(obs)
+        mean, std = policy_outputs[1], policy_outputs[5]
+        action_dist = TanhNormal(mean, std)
 
         # calculate discounted rewards
-        baselines = self.baseline(obs)
+        baselines = batch['baselines']
         rewards = batch['rewards']
         discounted_rew = rewards - baselines
 
+        self.policy_optimizer.zero_grad()
         # loglikelihood ratio of actions
         actions = batch['actions']
-        log_prob = action_dist.log_likelihood(actions)
-        loss = -torch.mean(log_prob, axis=1)
-
+        # TODO: currently the distribution is not correct for
+        # several reasons:
+        # 1. loglikelihood ratio is not used/implemented??
+        # 2. the policy class is not using multivariate distribution
+        # To fix these issues, I think we need to upgrade sac's policy
+        # but this needs more effort to verify if sac is still working
+        # with the multivariate version.
+        log_prob = action_dist.log_prob(actions)
+        loss = -torch.mean(torch.mean(log_prob, dim=1))
         loss.backward()
+        self.policy_optimizer.step()
 
     def train_from_torch(self, batch):
         self._train_policy(batch)
@@ -131,6 +143,7 @@ class PPOTrainer(TorchTrainer):
             rewards=rewards,
             returns=returns,
             advantages=advantages,
+            baselines=baselines,
         )
 
         for key, val in batch_data.items():
