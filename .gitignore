@@ -8,3 +8,4 @@ rlkit/launchers/conf_private.py
 \.idea/
 .vscode
 Pipfile.lock
+data/

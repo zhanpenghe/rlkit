@@ -70,22 +70,19 @@ class PPOTrainer(TorchTrainer):
         action_dist = TanhNormal(mean, std)
 
         # calculate discounted rewards
-        baselines = batch['baselines']
-        rewards = batch['rewards']
-        discounted_rew = rewards - baselines
+        advantages  = batch['advantages']
 
         self.policy_optimizer.zero_grad()
         # loglikelihood ratio of actions
         actions = batch['actions']
-        # TODO: currently the distribution is not correct for
-        # several reasons:
-        # 1. loglikelihood ratio is not used/implemented??
-        # 2. the policy class is not using multivariate distribution
-        # To fix these issues, I think we need to upgrade sac's policy
+        # TODO: currently the distribution is not correct because
+        # the policy class is not using multivariate distribution. To
+        # fix these issues, I think we need to upgrade sac's policy
         # but this needs more effort to verify if sac is still working
         # with the multivariate version.
         log_prob = action_dist.log_prob(actions)
-        loss = -torch.mean(torch.mean(log_prob, dim=1))
+        loss = -torch.mean(
+            torch.sum(log_prob, dim=1) * advantages)
         loss.backward()
         self.policy_optimizer.step()
 
