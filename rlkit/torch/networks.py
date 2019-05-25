@@ -187,6 +187,10 @@ class GaussianMlpBaseline(Mlp):
         means = super().forward(input, **kwargs)
         dist = self._distribution(means, torch.exp(self._log_std))
         samples = dist.rsample()
+        # normalization
+        if means.shape[0] > 1:
+            mean_bn = nn.BatchNorm1d(1, affine=False)
+            means = mean_bn(means)
         info = dict(mean=means, log_std=self._log_std, dist=dist)
         return samples, info
     

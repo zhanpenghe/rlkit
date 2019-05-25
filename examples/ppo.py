@@ -9,21 +9,23 @@ import rlkit.torch.pytorch_util as ptu
 from rlkit.torch.sac.policies import TanhGaussianPolicy, MakeDeterministic
 from rlkit.torch.torch_rl_algorithm import TorchOnpolicyRLAlgorithm
 
+from point_env import PointEnv
+
 
 def experiment(variant):
 
-    expl_env = HalfCheetahEnv()
+    expl_env = PointEnv(goal=(3, 3), random_start=False, action_scale=0.1)
     obs_dim = expl_env.observation_space.low.size
     action_dim = expl_env.action_space.low.size
 
     baseline = GaussianMlpBaseline(
         input_size=obs_dim,
-        hidden_sizes=(64, 64),)
+        hidden_sizes=(32, 32),)
 
     policy = TanhGaussianPolicy(
         obs_dim=obs_dim,
         action_dim=action_dim,
-        hidden_sizes=(64, 64),)
+        hidden_sizes=(32, 32),)
 
     trainer = PPOTrainer(policy=policy, baseline=baseline)
 

@@ -38,7 +38,7 @@ class TanhNormal(Distribution):
         """
         if pre_tanh_value is None:
             pre_tanh_value = torch.log(
-                (1+value) / (1-value)
+                (1+value) / (1-value+self.epsilon)
             ) / 2
         return self.normal.log_prob(pre_tanh_value) - torch.log(
             1 - value * value + self.epsilon

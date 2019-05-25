@@ -10,6 +10,16 @@ from rlkit.torch.distributions import TanhNormal
 from rlkit.torch.torch_rl_algorithm import TorchTrainer
 
 
+def check_gradients(model, name='model'):
+    params = model.parameters()
+    for p in params:
+        if p.requires_grad:
+            if p.grad is not None:
+                print(name, p.grad.mean())
+                if np.any(p.grad == np.nan) or np.any(p.grad == np.inf):
+                    return False
+    return True
+
 def discount_cumsum(x, discount):
     # See https://docs.scipy.org/doc/scipy/reference/tutorial/signal.html#difference-equation-filtering  # noqa: E501
     # Here, we have y[t] - discount*y[t+1] = x[t]
@@ -43,6 +53,9 @@ class PPOTrainer(TorchTrainer):
         self.policy_optimizer = policy_optimizer_cls(self.policy.parameters())
         self.baseline_optimizer = baseline_optimizer_cls(self.baseline.parameters())
 
+        # loggings
+        self._baseline_loss = None
+
         super().__init__()
 
     def _train_baseline(self, batch):
@@ -52,38 +65,47 @@ class PPOTrainer(TorchTrainer):
 
         # optimize baseline
         self.baseline_optimizer.zero_grad()
-        returns_pred = self.baseline(observations)[0]
-        critic = nn.MSELoss()
-        loss = critic(returns_pred, returns)
+        _, dist_info = self.baseline(observations)
+        dist = dist_info['dist']
+        # critic = nn.MSELoss(reduction='mean')
+        # loss = critic(returns_pred, returns)
+        bn = nn.BatchNorm1d(1, affine=False)
+        returns = bn(returns)
+        loss = dist.log_prob(returns)
+        loss = - torch.mean(loss)
         loss.backward()
+        if not check_gradients(self.baseline, name='baseline'):
+            import ipdb
+            ipdb.set_trace()
+        self._baseline_loss = loss.detach().numpy()
         self.baseline_optimizer.step()
 
     def _train_policy(self, batch):
         # forward pass
         # o --> policy --> action_dist
 
-        # obs.shape = [N_TRAJS, H, OBS_DIM]        
+        # obs.shape = [N_TRAJS, H, OBS_DIM]
         obs = batch['observations']
         obs = obs.reshape((-1, self.policy.input_size))
         policy_outputs = self.policy(obs)
         mean, std = policy_outputs[1], policy_outputs[5]
-        action_dist = TanhNormal(mean, std)
 
+        action_dist = TanhNormal(mean, std)
         # calculate discounted rewards
         advantages  = batch['advantages']
 
+        # optimize policy
         self.policy_optimizer.zero_grad()
-        # loglikelihood ratio of actions
         actions = batch['actions']
-        # TODO: currently the distribution is not correct because
-        # the policy class is not using multivariate distribution. To
-        # fix these issues, I think we need to upgrade sac's policy
-        # but this needs more effort to verify if sac is still working
-        # with the multivariate version.
         log_prob = action_dist.log_prob(actions)
         loss = -torch.mean(
             torch.sum(log_prob, dim=1) * advantages)
         loss.backward()
+
+        # check gradient
+        if not check_gradients(self.policy, name='policy'):
+            import ipdb
+            ipdb.set_trace()
         self.policy_optimizer.step()
 
     def train_from_torch(self, batch):
@@ -106,7 +128,6 @@ class PPOTrainer(TorchTrainer):
         # calculate advantages as it is done in https://arxiv.org/abs/1506.02438
         # for a more illustrative understanding, this is a blog post that describe
         # some insights of it: http://www.breloff.com/DeepRL-OnlineGAE/
-        # TODO (Yong): write advantage computation as a PyTorch module
         for idx, path in enumerate(batch):
             path_baselines = np.append(all_path_baselines[idx], 0)
             deltas = path['rewards'].squeeze() \
@@ -126,7 +147,7 @@ class PPOTrainer(TorchTrainer):
                                                       self.discount)
             returns.append(path['returns'])
 
-        obs = [path['observations'] for path in batch]       
+        obs = [path['observations'] for path in batch]
         actions = [path['actions'] for path in batch]
         rewards = [path['rewards'] for path in batch]
         returns = [path['returns'] for path in batch]
@@ -153,3 +174,9 @@ class PPOTrainer(TorchTrainer):
                 'are not matching!'
 
         return batch_data
+
+    def get_diagnostics(self):
+        diagnostics = dict()
+        if self._baseline_loss is not None:
+            diagnostics['baseline/loss'] = self._baseline_loss
+        return diagnostics

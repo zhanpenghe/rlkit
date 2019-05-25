@@ -104,7 +104,8 @@ class PointEnv(gym.Env):
             pygame.display.set_caption(caption)
             self.screen = pygame.display.set_mode((self.screen_width,
                                                    self.screen_height))
-
+        for _ in pygame.event.get():
+            pass
         self.screen.fill((255, 255, 255))
 
         # draw grid
